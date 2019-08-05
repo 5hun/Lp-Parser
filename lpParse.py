@@ -14,23 +14,13 @@ from sys import argv, exit
 from lpParse_f import Matrix, multiRemove
 import constants
 
-def read(filename):
-    # read input lp file
-    try:
-        fp = open(filename)
-        fullDataString = fp.read()
-        fp.close()
-    except IOError:
-        print "Could not find input lp file \"%s\""%argv[1]
-        raise IOError
 
-
-    #name char ranges for objective, constraint or variable
+def build_grammar():
     allNameChars = alphanums + "!\"#$%&()/,.;?@_'`{}|~"
     firstChar = multiRemove(allNameChars, nums + "eE.") #<- can probably use CharsNotIn instead
     name = Word(firstChar, allNameChars, max=255)
     keywords = ["inf", "infinity", "max", "maximum", "maximize", "min", "minimum", "minimize", "s.t.", "st", "bound", "bounds", "bin", "binaries", "binary", "gen",  "general", "end"]
-    pyKeyword = MatchFirst(map(CaselessKeyword, keywords))
+    pyKeyword = MatchFirst(list(map(CaselessKeyword, keywords)))
     validName = ~pyKeyword + name
     validName = validName.setResultsName("name")
 
@@ -69,7 +59,7 @@ def read(filename):
     varExpr = varExpr.setResultsName("varExpr")
 
     # objective
-    objective = objTag + Optional(validName + colon) + varExpr
+    objective = Group(objTag + Optional(validName + colon) + varExpr)
     objective = objective.setResultsName("objective")
 
     # constraint rhs
@@ -86,8 +76,7 @@ def read(filename):
     signedInf = (plusMinus + inf).setParseAction(lambda tokens:(tokens[0] == "+") * constants.infinity)
     signedNumber = (Optional(plusMinus, "+") + number).setParseAction(lambda tokens: eval("".join(tokens)))  # this is different to previous, because "number" is mandatory not optional
     numberOrInf = (signedNumber | signedInf).setResultsName("numberOrInf")
-    ineq = numberOrInf & sense
-    sensestmt = Group(Optional(ineq).setResultsName("leftbound") + validName + Optional(ineq).setResultsName("rightbound"))
+    sensestmt = Group(Optional(Group(numberOrInf + sense).setResultsName("leftbound")) + validName + Optional(Group(sense + numberOrInf).setResultsName("rightbound")))
     freeVar = Group(validName + Literal("free"))
 
     boundstmt = freeVar | sensestmt 
@@ -106,7 +95,18 @@ def read(filename):
     # commenting
     commentStyle = Literal("\\") + restOfLine
     grammar.ignore(commentStyle)
+    return grammar
 
+def read(filename):
+    # read input lp file
+    try:
+        fp = open(filename)
+        fullDataString = fp.read()
+        fp.close()
+    except IOError:
+        print("Could not find input lp file \"%s\""%argv[1])
+        raise IOError
+    grammar = build_grammar()
     # parse input string
     parseOutput = grammar.parseString(fullDataString)
 
@@ -119,8 +119,8 @@ if __name__ == "__main__":
     try:
         argv[1]
     except IndexError:
-        print "Usage: $ python lpParse.py <lpfile>"
+        print("Usage: $ python lpParse.py <lpfile>")
         exit()
             
     m = read(argv[1])
-    print m
+    print(m)

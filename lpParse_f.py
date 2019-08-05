@@ -44,11 +44,11 @@ class Matrix:
         boundDict = getBoundDict(parserBounds, parserBinaries) # can't get parser to generate this dict because one var can have several bound statements
         
         allVarNames = set()
-        allVarNames.update(self.objective.expression.keys())
+        allVarNames.update(list(self.objective.expression.keys()))
         for c in self.constraints:
-            allVarNames.update(c.expression.keys())
+            allVarNames.update(list(c.expression.keys()))
         allVarNames.update(parserGenerals)
-        allVarNames.update(boundDict.keys())
+        allVarNames.update(list(boundDict.keys()))
         
         self.variables = [Matrix.Variable(boundDict[vName], ((vName in list(parserGenerals)) or (vName in list(parserBinaries))), vName) for vName in allVarNames]
 
@@ -100,5 +100,5 @@ def multiRemove(baseString, removables):
         try:
             baseString = baseString.replace(r, "")
         except TypeError:
-            raise TypeError, "Removables contains a non-string element"
+            raise TypeError("Removables contains a non-string element")
     return baseString
