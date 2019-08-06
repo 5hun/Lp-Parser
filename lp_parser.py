@@ -15,6 +15,7 @@ from collections import defaultdict
 import sys
 
 import pyparsing as pp
+import pulp
 
 MINIMIZE = 1
 MAXIMIZE = -1
@@ -124,6 +125,55 @@ class Matrix:
             ])
         )
 
+    @staticmethod
+    def convert_constraint(c, n2v) -> pulp.LpConstraint:
+        r"""Convert Constraint object to pulp.LpConstraint"""
+        lhs = pulp.lpSum([
+            coef * n2v[name] for name, coef in c.expression.items()])
+        if c.sense == 1:
+            return pulp.LpConstraint(
+                e=lhs, sense=pulp.LpConstraintGE, rhs=c.rhs,
+                name=c.name if c.name else None)
+        elif c.sense == 0:
+            return pulp.LpConstraint(
+                e=lhs, sense=pulp.LpConstraintEQ, rhs=c.rhs,
+                name=c.name if c.name else None)
+        else:
+            assert c.sense == -1
+            return pulp.LpConstraint(
+                e=lhs, sense=pulp.LpConstraintLE, rhs=c.rhs,
+                name=c.name if c.name else None)
+
+    def to_pulp(self) -> pulp.LpProblem:
+        r"""Convert to pulp.LpProblem"""
+        if self.objective.sense == 1:
+            sense = pulp.constants.LpMinimize
+        else:
+            sense = pulp.constants.LpMaximize
+        prob = pulp.LpProblem(
+            name=self.objective.name,
+            sense=sense
+        )
+
+        vs = {}
+        for v in self.variables:
+            vs[v.name] = pulp.LpVariable(
+                v.name,
+                v.bounds[0] if v.bounds[0] > - INFINITY else None,
+                v.bounds[1] if v.bounds[1] < INFINITY else None,
+                "Continuous" if v.category == 0 else "Integer"
+            )
+
+        prob += pulp.lpSum([
+            coef * vs[name]
+            for name, coef in self.objective.expression.items()
+        ])
+
+        for c in self.constraints:
+            prob += self.convert_constraint(c, vs)
+
+        return prob
+
 
 def varExprToDict(varExpr):
     return dict((v.name[0], v.coef) for v in varExpr)
@@ -141,17 +191,17 @@ def getBoundDict(parserBounds, parserBinaries):
 
         if b.leftbound:
             if CONSTRAINT_SENSES[b.leftbound.sense] >= 0:  # NUM >= var
-                boundDict[bName]["ub"] = b.leftbound.numberOrInf
+                boundDict[bName]["ub"] = b.leftbound.numberOrInf[0]
 
             if CONSTRAINT_SENSES[b.leftbound.sense] <= 0:  # NUM <= var
-                boundDict[bName]["lb"] = b.leftbound.numberOrInf
+                boundDict[bName]["lb"] = b.leftbound.numberOrInf[0]
 
         if b.rightbound:
             if CONSTRAINT_SENSES[b.rightbound.sense] >= 0:  # var >= NUM
-                boundDict[bName]["lb"] = b.rightbound.numberOrInf
+                boundDict[bName]["lb"] = b.rightbound.numberOrInf[0]
 
             if CONSTRAINT_SENSES[b.rightbound.sense] <= 0:  # var <= NUM
-                boundDict[bName]["ub"] = b.rightbound.numberOrInf
+                boundDict[bName]["ub"] = b.rightbound.numberOrInf[0]
 
     for bName in parserBinaries:
         boundDict[bName]["lb"] = 0
@@ -243,7 +293,7 @@ def build_grammar():
 
     # bounds
     signedInf = (plusMinus + inf).setParseAction(
-        lambda tokens: (tokens[0] == "+") * INFINITY)
+        lambda tokens: -1 ** (tokens[0] == "-") * INFINITY)
     # this is different to previous,
     # because "number" is mandatory not pp.Optional
     signedNumber = (pp.Optional(plusMinus, "+") + number).setParseAction(
@@ -251,9 +301,9 @@ def build_grammar():
     numberOrInf = (signedNumber | signedInf).setResultsName("numberOrInf")
     sensestmt = pp.Group(
         pp.Optional(
-            pp.Group(numberOrInf + sense).setResultsName("leftbound")) +
+            pp.Group(numberOrInf & sense).setResultsName("leftbound")) +
         validName +
-        pp.Optional(pp.Group(sense + numberOrInf).setResultsName("rightbound"))
+        pp.Optional(pp.Group(numberOrInf & sense).setResultsName("rightbound"))
     )
     freeVar = pp.Group(validName + pp.Literal("free"))
 
@@ -276,7 +326,7 @@ def build_grammar():
     return grammar
 
 
-def read(filename):
+def read(filename, pulp=True):
     # read input lp file
     try:
         fp = open(filename)
@@ -294,7 +344,10 @@ def read(filename):
         parseOutput.objective, parseOutput.constraints, parseOutput.bounds,
         parseOutput.generals, parseOutput.binaries)
 
-    return m
+    if pulp:
+        return m.to_pulp()
+    else:
+        return m
 
 
 if __name__ == "__main__":

@@ -1,7 +1,13 @@
-Very small and simple parser for .LP files into logical Python data structures
+# Lp-Parser
 
-Usage:
->>> import lp_parse
->>> m = lp_parse.read("<lpFile>")
+Very small and simple parser for .LP files
+into logical Python data structures.
 
-where m is a generic Matrix format as defined in lp_parse
+# Usage
+
+```
+>>> import lp_parser
+>>> m = lp_parser.read("<lpFile>")
+```
+
+where m is a `pulp.LpProblem` object.
