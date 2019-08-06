@@ -354,7 +354,7 @@ if __name__ == "__main__":
     try:
         sys.argv[1]
     except IndexError:
-        print("Usage: $ python lpParse.py <lpfile>")
+        print("Usage: $ python lp_parser.py <lpfile>")
         sys.exit()
 
     m = read(sys.argv[1])
